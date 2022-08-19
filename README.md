@@ -1,2 +1,2 @@
 # Phoenix_Transformation
-Hi. Due to file size limitations, the training image library for SRGAN and StyleGAN-ADA is not included in this repository.
+Hi. Due to file size limitations, only a small portion of images are included in the training library for SRGAN and StyleGAN-ADA.
