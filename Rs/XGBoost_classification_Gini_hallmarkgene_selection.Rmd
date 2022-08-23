@@ -1,0 +1,140 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```
+library(boot)
+library(limma)
+library(pheatmap)
+library(RColorBrewer)
+library(viridis)
+library(dplyr)
+library(gplots)
+library(heatmap3)
+library(caret)
+library(nnet)
+library(ROCR)
+library(ranger)
+library(data.table)
+library(xgboost)
+library(Matrix)
+library(glmnet)
+library(pROC)
+library(mRMRe)
+library(tibble)
+library(TCGAbiolinks)
+library(SummarizedExperiment)
+library(edgeR)
+library(EDASeq)
+
+tableAccuracy <- function(test, pred) {
+  t = table(test, pred)
+  a = sum(diag(t)/length(test))
+  return(a)
+}
+
+#import expression data from csv files.
+REAL_dataNorm_HTseq <- read.csv(file=file.choose(), header=TRUE, row.names = 1, sep=',')
+REAL_dataFilt_HTSeq <- TCGAanalyze_Filtering(tabDF = REAL_dataNorm_HTseq,
+method = "quantile", qnt.cut =  0.25)
+REAL_sample_info_HTSeq.edger <- factor(c(rep("LUSCTP", 100), rep("LUADTP", 100)))
+REAL_sample_info_HTSeq.edger <- relevel(REAL_sample_info_HTSeq.edger, ref = "LUADTP")
+REAL_edgeR.DEGlist.TP.HTSeq <- DGEList(counts = REAL_dataFilt_HTSeq, group = REAL_sample_info_HTSeq.edger)
+
+#dispersion estimate and normalization
+REAL_design_HTSeq <- model.matrix(~REAL_sample_info_HTSeq.edger)
+REAL_edgeR.DEGlist.TP.HTSeq <- estimateDisp(REAL_edgeR.DEGlist.TP.HTSeq, REAL_design_HTSeq)
+REAL_edger_fit_HTSeq <- glmFit(REAL_edgeR.DEGlist.TP.HTSeq, REAL_design_HTSeq)
+REAL_edger_lrt_HTSeq <- glmLRT(REAL_edger_fit_HTSeq)
+REAL_DEG.results_edgeR_HTSeq <- topTags(REAL_edger_lrt_HTSeq, n = Inf, sort.by = "PValue", adjust.method = "BH" )
+REAL_combined_TP_counts <- REAL_edgeR.DEGlist.TP.HTSeq$counts
+REAL_combined_TP_tmm <- cpm(REAL_edgeR.DEGlist.TP.HTSeq)
+REAL_xgboost_rf_matrix <- as.data.frame(t(REAL_combined_TP_tmm))
+REAL_xgboost_rf_matrix$isLUSC <- t(tumor_type["tumor_type", ])
+set.seed(12)
+
+#XGBClassification
+REAL_train.xgb.rf <- sample(nrow(REAL_xgboost_rf_matrix), floor(0.7*nrow(REAL_xgboost_rf_matrix)))
+REAL_xgb.rf.train <- REAL_xgboost_rf_matrix[REAL_train.xgb.rf,]
+REAL_xgb.rf.test <- REAL_xgboost_rf_matrix[-REAL_train.xgb.rf,]
+table(REAL_xgb.rf.test$isLUSC)
+REAL_xgb.rf.train.dmatrix <- REAL_xgb.rf.train
+REAL_xgb.rf.train.dmatrix$isLUSC <- NULL
+REAL_xgb.rf.test.dmatrix <- REAL_xgb.rf.test
+REAL_xgb.rf.test.dmatrix$isLUSC <- NULL
+REAL_xgb.rf.dtrain <- xgb.DMatrix(data = data.matrix(REAL_xgb.rf.train.dmatrix), label = data.matrix(REAL_xgb.rf.train$isLUSC))
+REAL_xgb.rf.dtest <- xgb.DMatrix(data = data.matrix(REAL_xgb.rf.test.dmatrix), label = data.matrix(REAL_xgb.rf.test$isLUSC))
+REAL_params <- list(booster = "gbtree", objective = "binary:logistic", eta=0.3, gamma = 0, max_depth = 6, min_child_weight = 1, subsample = 1, solsample_bytree = 1)
+REAL_xgbcv.rf <- xgb.cv(params = REAL_params, data = REAL_xgb.rf.dtrain, nrounds = 100, nfold = 5, showsd = T, stratified = T, print.ever.n = 10, early_stop_rounds = 20, maximize = F)
+REAL_xgb_rf <- xgb.train(data = REAL_xgb.rf.dtrain, params = REAL_params, nrounds = 50, eval_metric = "error")
+REAL_xgb_rf_pred <- predict(REAL_xgb_rf, REAL_xgb.rf.dtest)
+REAL_xgb_rf_pred <- ifelse(REAL_xgb_rf_pred > 0.5,1,0)
+
+tableAccuracy(REAL_xgb.rf.test$isLUSC, REAL_xgb_rf_pred)
+table(REAL_xgb.rf.test$isLUSC, REAL_xgb_rf_pred)
+
+REAL_xgb_rf_mat <- xgb.importance(feature_names = colnames(REAL_xgb.rf.dtrain), model = REAL_xgb_rf)
+xgb.plot.importance(importance_matrix = REAL_xgb_rf_mat)
+REAL_xgb_rf_mat$Feature
+REAL_xgb_ML_matrix_HTSeq <- as.data.frame(t(REAL_combined_TP_tmm[REAL_xgb_rf_mat$Feature,]))
+write.csv(REAL_xgb_rf_mat, "REAL_xgb_rf_mat_trial2.csv")
+
+#DEG validattion with random forest (ranger)
+setDT(REAL_DEG.results_edgeR_HTSeq$table, keep.rownames = TRUE)[]
+REAL_lst_genes_HTSeq <- head(REAL_DEG.results_edgeR_HTSeq$table$rn, 500)
+REAL_DEG_machine_learning_matrix_HTSeq <- REAL_combined_TP_tmm[REAL_lst_genes_HTSeq,]
+REAL_DEG_machine_learning_matrix_HTSeq <- as.data.frame(t(REAL_DEG_machine_learning_matrix_HTSeq))
+REAL_DEG_machine_learning_matrix_HTSeq <- REAL_combined_TP_tmm[REAL_lst_genes_HTSeq,]
+REAL_DEG_machine_learning_matrix_HTSeq <- as.data.frame(t(REAL_DEG_machine_learning_matrix_HTSeq))
+
+REAL_DEG_machine_learning_matrix_HTSeq$isLUSC <- factor(c(rep("1", 100), rep("0", 100)))
+
+set.seed(12)
+REAL_train.DEG.HTSeq <- sample(nrow(REAL_DEG_machine_learning_matrix_HTSeq), 0.7*nrow(REAL_DEG_machine_learning_matrix_HTSeq))
+REAL_DEG_machine_learning_matrix.train.HTSeq <- REAL_DEG_machine_learning_matrix_HTSeq[REAL_train.DEG.HTSeq,]
+REAL_DEG_machine_learning_matrix.test.HTSeq <- REAL_DEG_machine_learning_matrix_HTSeq[-REAL_train.DEG.HTSeq,]
+table(REAL_DEG_machine_learning_matrix.test.HTSeq$isLUSC)
+
+
+tgrid <- expand.grid(
+  .mtry = 1:30,
+  .splitrule = "gini", 
+  .min.node.size = 1
+)
+
+set.seed(12)
+DDEG.rf.cv <- train(isLUSC ~ ., 
+                   data = REAL_DEG_machine_learning_matrix.train.HTSeq,
+                   method = "ranger",
+                   tuneGrid = tgrid,
+                   trControl = trainControl(method = "cv", number = 3, verboseIter = TRUE)
+                   )
+
+DEG.rf.cv #mtry = 18
+# Training the Data and Testing
+set.seed(12)
+REAL_DEG_rf.HTSeq <- ranger(isLUSC ~ ., mtry  = 5, data = REAL_DEG_machine_learning_matrix.train.HTSeq, importance = "impurity")
+REAL_DEG_pred_HTSeq <- predict(REAL_DEG_rf.HTSeq, data = REAL_DEG_machine_learning_matrix.test.HTSeq)
+REAL_DEG_machine_learning_matrix.test.HTSeq
+REAL_DEG_accuracy.HTSeq <- tableAccuracy(REAL_DEG_pred_HTSeq$predictions, REAL_DEG_machine_learning_matrix.test.HTSeq$isLUSC)
+REAL_DEG_accuracy.HTSeq
+table(REAL_DEG_pred_HTSeq$predictions, REAL_DEG_machine_learning_matrix.test.HTSeq$isLUAD)
+REAL_DEG_ranger_gini.HTSeq <- as.data.frame(REAL_DEG_rf.HTSeq$variable.importance)
+setDT(REAL_DEG_ranger_gini.HTSeq, keep.rownames = TRUE)[]
+colnames(REAL_DEG_ranger_gini.HTSeq) <- c("Gene", "Gini")
+REAL_DEG_ranger_gini_table <- REAL_DEG_ranger_gini.HTSeq %>% arrange(desc(Gini))
+REAL_DEG_ranger_gini_table
+write.csv(REAL_DEG_ranger_gini_table, "DEG_rf_gini.csv", sep=',')
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
