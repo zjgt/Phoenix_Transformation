@@ -8,6 +8,9 @@ https://drive.google.com/drive/folders/1grCMEqRQ0qSmp2a7z9PICSL6V_6fdm09?usp=sha
 The full training library for SRGABN can be accessed at:
 https://drive.google.com/drive/folders/1Qz5xjVuTKpN9jl8qPWVvjX_flx0xOs63?usp=sharing
 
+Supplementary Tables with gene coordinates and expression tables to create your own transcriptome images can be accessed at:
+https://drive.google.com/file/d/1OOgXaZh5a7v_9NcBLvCrfIF4-5bI6DIt/view?usp=sharing
+
 SRGAN is cloned from: https://github.com/Lornatang/SRGAN-PyTorch.
 
 StyleGAN2-ADA is cloned from: https://github.com/dvschultz/stylegan2-ada-pytorch.
