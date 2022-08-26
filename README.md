@@ -25,7 +25,7 @@ Main functionalities of this repository are:
 
 4, train.py from the StyleGAN folder can be used to train models for transcriptome images.
 
-5, generate.py from the StyleGAN folder can be used to synthesize transcriptome images from trained models with class-specific seeds.
+5, generate.py from the StyleGAN folder can be used to synthesize transcriptome images from trained models with class-specific seeds. The class information can be found in TcgaTargetGtex_group_assignment.csv in the StyleGAN folder.
 
 6, train512_1024.py from the SRGAN folder can be used to train transcriptome images for super-resolution from 512x512 to 1024x1024 pixels.
 
