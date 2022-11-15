@@ -38,3 +38,5 @@ Main functionalities of this repository are:
 10, Image_quantification_for_folder_G57_1.py from the SRGAN folder can be used to convert transcritome images of 3072x3072 resolution to gene expression lists.
 
 The trained models for transcriptome image super resolution can be found in the SRGAN/epochs folder.
+
+An earlier version of the manuscript is also provided here. Manuscript v1 illustrates more functional applications than the version submitted to biorxiv.
